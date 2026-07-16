@@ -378,13 +378,20 @@ function renderAccountsPage() {
 
     updateAccAllPill();
 
+    const filtersBar = document.getElementById("accFiltersBar");
+    if (filtersBar) filtersBar.style.display = (data.accounts || []).length === 0 ? "none" : "";
+
     if (accounts.length === 0) {
-        el.innerHTML = `
-        <div class="acc-page-empty">
-          <div class="acc-page-empty-icon">🏦</div>
-          <p>No accounts yet.</p>
-          <p>Add your bank accounts, credit cards, and cash in <button class="acc-link-btn" onclick="showSection('settings')">Settings → Bank Accounts</button>.</p>
-        </div>`;
+        if ((data.accounts || []).length === 0) {
+            el.innerHTML = `
+            <div class="acc-page-empty">
+              <div class="acc-page-empty-icon">🏦</div>
+              <p>No accounts yet.</p>
+              <button class="acc-add-btn" onclick="openAccountModal()">+ Add Account</button>
+            </div>`;
+        } else {
+            el.innerHTML = `<div class="acc-empty-filter">No accounts match this filter.</div>`;
+        }
         return;
     }
 

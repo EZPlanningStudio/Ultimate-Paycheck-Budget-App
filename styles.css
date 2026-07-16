@@ -1633,9 +1633,9 @@
    .filters-left {
        display: flex;
        align-items: center;
-       gap: 6px;
+       gap: 5px;
        flex-wrap: wrap;
-       flex: 1;
+       flex: 1 1 auto;
    }
 
    .filters-label {
@@ -1810,7 +1810,7 @@
    .filter-pill {
        border: 1px solid var(--line);
        background: var(--card);
-       padding: 6px 14px;
+       padding: 5px 12px;
        border-radius: 999px;
        cursor: pointer;
        font-size: 13px;
@@ -1841,7 +1841,7 @@
        width: auto;
        border: 1px solid var(--line);
        border-radius: 999px;
-       padding: 6px 28px 6px 14px;
+       padding: 5px 26px 5px 12px;
        font-size: 13px;
        font-weight: 700;
        color: var(--text-h2);
@@ -6566,6 +6566,8 @@
 
 .acc-page-empty p { margin: 4px 0; font-size: 14px; }
 
+.acc-empty-filter { text-align: center; padding: 24px; color: var(--muted); font-size: 14px; }
+
 .acc-link-btn {
     background: none;
     border: none;
@@ -7446,7 +7448,8 @@
 .toolbar-actions {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
+    flex-shrink: 0;
 }
 
 .dt-schedule-empty {
