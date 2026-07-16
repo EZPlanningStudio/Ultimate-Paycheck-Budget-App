@@ -1,0 +1,16 @@
+{
+  "name": "Ultimate Paycheck Budget App",
+  "short_name": "Ultimate Paycheck",
+  "description": "Track your paycheck, bank accounts, savings goals, and debt payoff all in one place",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#fdf5f9",
+  "theme_color": "#fe7aa7",
+  "icons": [
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
