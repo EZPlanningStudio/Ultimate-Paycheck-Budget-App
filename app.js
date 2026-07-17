@@ -6025,6 +6025,11 @@ async function importLatestBackup() {
 }
 
 async function smartImportBackup() {
+    if (!window.showDirectoryPicker) {
+        document.getElementById("importJson").click();
+        return;
+    }
+
     const directoryHandle = await getBackupDirectoryHandle();
 
     if (directoryHandle) {
