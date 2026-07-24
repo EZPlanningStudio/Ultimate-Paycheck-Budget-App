@@ -1580,6 +1580,7 @@ const sectionConfig = {
     backup: { main: "Backup", getLabel: null },
     quickstart: { main: "quick start", secondary: "guide", getLabel: null },
     contact: { main: "contact", secondary: "us", getLabel: null },
+    faq: { main: "FAQ", getLabel: null },
     accounts: { main: "accounts", secondary: "bank", getLabel: null },
     savings:  { main: "savings",  secondary: "funds", getLabel: null },
     debt:     { main: "debt",     secondary: "payments", getLabel: null },
@@ -1661,7 +1662,7 @@ function showSection(section) {
     renderPageHeader(section);
 
     const config = sectionConfig[section];
-    document.getElementById("pageTitle").classList.remove("page-calendar", "page-list", "page-monthly", "page-yearly", "page-settings", "page-backup", "page-quickstart", "page-contact", "page-accounts", "page-savings", "page-debt");
+    document.getElementById("pageTitle").classList.remove("page-calendar", "page-list", "page-monthly", "page-yearly", "page-settings", "page-backup", "page-quickstart", "page-contact", "page-faq", "page-accounts", "page-savings", "page-debt");
     document.getElementById("pageTitle").classList.add(`page-${section}`);
 
     if (config && typeof config.main !== "undefined") {
@@ -1674,7 +1675,12 @@ function showSection(section) {
     updateSectionLabel(section);
 
     if (section === "list") {
+        renderBills();
         if (typeof openTransactionListInfoModal === "function") openTransactionListInfoModal();
+    }
+
+    if (section === "settings") {
+        renderSettings();
     }
 
     if (section === "calendar") {
@@ -1720,15 +1726,15 @@ function renderAll() {
     const activeSection = currentActiveSection;
     renderPageHeader(activeSection);
     renderFilterOptions();
-    renderBills();
-    renderCalendar();
-    renderMonthlyInsights();
-    renderYearlySummary();
-    renderSettings();
+    if (activeSection === "list") renderBills();
+    if (activeSection === "calendar") renderCalendar();
+    if (activeSection === "monthly") renderMonthlyInsights();
+    if (activeSection === "yearly") renderYearlySummary();
+    if (activeSection === "settings") renderSettings();
     updateCurrencyInputDisplay();
     if (typeof renderAccountsPage === "function" && activeSection === "accounts") renderAccountsPage();
     if (typeof renderSavingsPage === "function" && activeSection === "savings") renderSavingsPage();
-    if (typeof renderDebtPage === "function") renderDebtPage();
+    if (typeof renderDebtPage === "function" && activeSection === "debt") renderDebtPage();
 }
 
 function renderAllPreservingCalPanel() {
@@ -1934,7 +1940,8 @@ function renderSettings() {
 
 const HIDEABLE_MENU_ITEMS = [
     { section: "quickstart", label: "Quick Start Guide" },
-    { section: "contact", label: "Contact" }
+    { section: "contact", label: "Contact" },
+    { section: "faq", label: "FAQ" }
 ];
 
 function renderMenuVisibilitySettings() {
@@ -2033,6 +2040,14 @@ function showActivationModal() {
 function toggleBackupGuide() {
   const body = document.getElementById('backupGuideBody');
   const chevron = document.getElementById('backupGuideChevron');
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : 'block';
+  chevron.classList.toggle('open', !isOpen);
+}
+
+function toggleFaqItem(btn) {
+  const body = btn.nextElementSibling;
+  const chevron = btn.querySelector('.backup-guide-chevron');
   const isOpen = body.style.display !== 'none';
   body.style.display = isOpen ? 'none' : 'block';
   chevron.classList.toggle('open', !isOpen);
@@ -3245,7 +3260,7 @@ function renderPageHeader(section) {
 
     if (!pageHeader || !summaryGrid) return;
 
-    const hidden = ["settings", "backup", "quickstart"];
+    const hidden = ["settings", "backup", "quickstart", "faq"];
     if (hidden.includes(section)) {
         pageHeader.style.display = "none";
         document.querySelector("main")?.classList.add("no-header");
@@ -7686,6 +7701,18 @@ function renderSavingsGoals() {
     });
 }
 
+function initAccWarningTipOutsideClose() {
+    if (window._accWarningTipOutsideCloseBound) return;
+    window._accWarningTipOutsideCloseBound = true;
+    document.addEventListener("click", function(e) {
+        const openTip = window._openAccWarningTip;
+        if (!openTip) return;
+        if (openTip.tip.contains(e.target) || openTip.trigger.contains(e.target)) return;
+        openTip.tip.style.display = "none";
+        window._openAccWarningTip = null;
+    });
+}
+
 function populateSavingsGoalAccountDropdown(selectedId) {
     const select = document.getElementById("savingsGoalAccount");
     if (!select) return;
@@ -7705,12 +7732,31 @@ function populateSavingsGoalAccountDropdown(selectedId) {
         if (savingsAccounts.length === 0) {
             tip = document.createElement("div");
             tip.id = "savingsAccTip";
-            tip.style.cssText = "display:none;position:absolute;bottom:calc(100% + 4px);left:0;min-width:300px;z-index:500;background:#fff3f3;border:1.5px solid #d0323c;border-radius:8px;padding:8px 12px;font-size:12px;color:#d0323c;box-shadow:0 4px 12px rgba(0,0,0,0.15);";
+            tip.style.cssText = "display:none;position:fixed;min-width:300px;max-width:340px;z-index:2000;background:#fff3f3;border:1.5px solid #d0323c;border-radius:8px;padding:8px 12px;font-size:12px;color:#d0323c;box-shadow:0 4px 12px rgba(0,0,0,0.15);";
             tip.innerHTML = "⚠️ No savings accounts found. Go to <strong>Settings → Bank Accounts</strong> and add a Savings account first, or <button onclick=\"event.stopPropagation();openAccountModalWithType('savings');document.getElementById('accountModal').style.zIndex='1300';\" style=\"background:none;border:none;padding:0;font:inherit;font-size:inherit;color:#d0323c;text-decoration:underline;cursor:pointer;font-weight:600;\">add one now</button>.";
-            label.appendChild(tip);
-            select.onclick = function() {
-                tip.style.display = tip.style.display === "block" ? "none" : "block";
-            };
+            document.body.appendChild(tip);
+            initAccWarningTipOutsideClose();
+            if (!label.dataset.accTipBound) {
+                label.dataset.accTipBound = "true";
+                label.addEventListener("click", function(e) {
+                    if (e.target.closest(".help-icon")) return;
+                    const curTip = document.getElementById("savingsAccTip");
+                    if (!curTip) return;
+                    e.stopPropagation();
+                    e.preventDefault();
+                    const isOpen = curTip.style.display === "block";
+                    if (isOpen) {
+                        curTip.style.display = "none";
+                        window._openAccWarningTip = null;
+                    } else {
+                        const r = label.getBoundingClientRect();
+                        curTip.style.right = (window.innerWidth - r.right) + "px";
+                        curTip.style.bottom = (window.innerHeight - r.top + 4) + "px";
+                        curTip.style.display = "block";
+                        window._openAccWarningTip = { tip: curTip, trigger: label };
+                    }
+                }, true);
+            }
             select.onchange = null;
         } else {
             select.onclick = null;
@@ -7835,6 +7881,8 @@ window.deleteSavingsPlannedTransactions = deleteSavingsPlannedTransactions;
 
 function closeSavingsGoalModal() {
     document.getElementById("savingsGoalModal").classList.remove("active");
+    document.getElementById("savingsAccTip")?.remove();
+    window._openAccWarningTip = null;
 }
 
 function saveSavingsGoal() {
