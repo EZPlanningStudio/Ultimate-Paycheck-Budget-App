@@ -363,7 +363,7 @@ function savePaycheckNote(textarea, key) {
     const segBarColors = ["var(--yellow)", "var(--orange)", "var(--pink)", "var(--pink)"];
 
     const incomeRec = paycheckBills.filter(b => b.category === data.categories[0] && b.paid).reduce((s, b) => b.type === "refund" ? s - (parseFloat(getBillDisplayAmount(b)) || 0) : s + (parseFloat(getBillDisplayAmount(b)) || 0), 0);
-    const savingsRec = paycheckBills.filter(b => b.category === data.categories[1] && b.paid).reduce((s, b) => b.type === "refund" ? s - (parseFloat(getBillDisplayAmount(b)) || 0) : s + (parseFloat(getBillDisplayAmount(b)) || 0), 0);
+    const savingsRec = paycheckBills.filter(b => b.category === data.categories[1] && b.type !== "interest" && b.paid).reduce((s, b) => b.type === "refund" ? s - (parseFloat(getBillDisplayAmount(b)) || 0) : s + (parseFloat(getBillDisplayAmount(b)) || 0), 0);
     const cashSpent = paycheckBills.filter(b => spendingCats.includes(b.category) && b.paid && !isFromCreditAccount(b)).reduce((s, b) => b.type === "refund" ? s - (parseFloat(getBillDisplayAmount(b)) || 0) : s + (parseFloat(getBillDisplayAmount(b)) || 0), 0);
     const investmentsRec = paycheckBills.filter(b => b.category === "Investments" && b.paid).reduce((s, b) => b.type === "refund" ? s - (parseFloat(getBillDisplayAmount(b)) || 0) : s + (parseFloat(getBillDisplayAmount(b)) || 0), 0);
     const totalBase = rollover + incomeRec;
