@@ -228,6 +228,7 @@
        width: 240px;
        scrollbar-width: thin;
        scrollbar-color: var(--line) transparent;
+       z-index: 20;
    }
 
    aside::-webkit-scrollbar {
@@ -1997,6 +1998,32 @@
        text-decoration: line-through;
        opacity: 0.7;
        white-space: nowrap;
+   }
+
+   .bill-debt-split {
+       font-size: 11px;
+       font-weight: 600;
+       color: var(--muted);
+   }
+
+   .bill-debt-split--desktop {
+       position: absolute;
+       top: 20px;
+       right: 0;
+       line-height: 1;
+       white-space: nowrap;
+   }
+
+   .bill-debt-split--desktop.bill-debt-split--stacked {
+       top: 34px;
+   }
+
+   .bill-debt-split--mobile {
+       display: none;
+   }
+
+   .paid-muted .bill-debt-split {
+       color: var(--done-text-strong) !important;
    }
 
    .bill-meta span {
@@ -4212,6 +4239,21 @@
        line-height: 1.5;
    }
 
+   .faq-item {
+       padding: 16px 0;
+       border-top: 1px solid var(--line);
+   }
+
+   .faq-item:first-child {
+       padding-top: 0;
+       border-top: none;
+   }
+
+   .faq-item .backup-guide-toggle {
+       font-size: 15px;
+       font-weight: 600;
+   }
+
    .note {
        background: var(--pink-soft);
        color: var(--note-dark);
@@ -5847,36 +5889,44 @@
            order: 6;
        }
 
-       #billPaidAmountWrap {
+       #billInterestWrap {
            order: 7;
        }
 
-       .form-grid label:has(#billDate) {
+       #billPaidAmountWrap {
            order: 8;
        }
 
-       #billPaidDateWrap {
+       #billPaidInterestWrap {
            order: 9;
        }
 
-       .form-grid label:has(#billPriority) {
+       .form-grid label:has(#billDate) {
            order: 10;
        }
 
-       #billFrequencyWrap {
+       #billPaidDateWrap {
            order: 11;
        }
 
-       #billIntervalWrap {
+       .form-grid label:has(#billPriority) {
            order: 12;
        }
 
-       #billEndDateWrap {
+       #billFrequencyWrap {
            order: 13;
        }
 
-       .form-grid label:has(#billNotes) {
+       #billIntervalWrap {
            order: 14;
+       }
+
+       #billEndDateWrap {
+           order: 15;
+       }
+
+       .form-grid label:has(#billNotes) {
+           order: 16;
        }
 
        .bill-names-grid,
@@ -5925,6 +5975,15 @@
        .bill-amount {
            font-size: 14px;
            flex-shrink: 0;
+       }
+
+       .bill-debt-split--desktop {
+           display: none !important;
+       }
+
+       .bill-debt-split--mobile {
+           display: block;
+           margin-top: 2px;
        }
 
        .bill-details-row {

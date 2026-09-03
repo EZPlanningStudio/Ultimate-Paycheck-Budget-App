@@ -100,12 +100,7 @@ function getDebtBalance(debt) {
         // No fixed monthly grid (e.g. pay-by-due-date): payments reduce balance directly
         const paidPrincipal = (data.bills || [])
             .filter(b => b.debtId === debt.id && b.debtGenerated && b.paid)
-            .reduce((s, b) => {
-                if (b.actualAmount != null) {
-                    return s + Math.max(0, parseFloat(b.actualAmount) - (parseFloat(b.debtInterest) || 0));
-                }
-                return s + (parseFloat(b.debtPrincipal) || 0);
-            }, 0);
+            .reduce((s, b) => s + Math.max(0, parseFloat(getBillDebtPrincipal(b)) || 0), 0);
         return Math.max(orig - paidPrincipal - getManualDebtPaidNet(debt), 0);
     }
 
@@ -147,7 +142,7 @@ function getDebtBalance(debt) {
             pool += paidBill.actualAmount != null
                 ? (parseFloat(paidBill.actualAmount) || 0)
                 : (parseFloat(paidBill.amount) || 0);
-            if (paidBill.debtInterest != null) interest = parseFloat(paidBill.debtInterest) || 0;
+            if (paidBill.debtInterest != null) interest = parseFloat(getBillDebtInterest(paidBill)) || 0;
         }
         for (const mp of manualPays) {
             if (mp.date > prev && mp.date <= cursor) pool += mp.amt;
@@ -295,7 +290,9 @@ function generateDebtTransactions(debt) {
             debtId: debt.id,
             debtGenerated: true,
             debtPrincipal: parseFloat(Math.max(row.payment - row.interest, 0).toFixed(2)),
-            debtInterest: parseFloat(row.interest.toFixed(2))
+            debtInterest: parseFloat(row.interest.toFixed(2)),
+            actualDebtPrincipal: null,
+            actualDebtInterest: null
         }));
 
     data.bills.push(...newBills);
@@ -452,7 +449,7 @@ function generatePayoffSchedule(debt) {
         const isPaidRow = !!paidBill || (!pendingBill && realMoney >= scheduledPay - 0.01 && realMoney > 0.005);
 
         const interest = (paidBill && paidBill.debtInterest != null)
-            ? (parseFloat(paidBill.debtInterest) || 0)
+            ? (parseFloat(getBillDebtInterest(paidBill)) || 0)
             : parseFloat((balanceExact * r).toFixed(2));
 
         // The Balance column is a running projection (like a bank statement's amortization

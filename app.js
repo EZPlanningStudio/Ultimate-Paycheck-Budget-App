@@ -92,7 +92,9 @@ const defaultData = {
         debtId: null,
         debtGenerated: false,
         debtPrincipal: null,
-        debtInterest: null
+        debtInterest: null,
+        actualDebtPrincipal: null,
+        actualDebtInterest: null
     },
     bills: [],
     customCurrencies: [],
@@ -228,7 +230,11 @@ const els = {
     billIntervalWrap: document.getElementById("billIntervalWrap"),
     billEndDate: document.getElementById("billEndDate"),
     billPaidAmount: document.getElementById("billPaidAmount"),
-    billPaidAmountWrap: document.getElementById("billPaidAmountWrap"),  
+    billPaidAmountWrap: document.getElementById("billPaidAmountWrap"),
+    billInterest: document.getElementById("billInterest"),
+    billInterestWrap: document.getElementById("billInterestWrap"),
+    billPaidInterest: document.getElementById("billPaidInterest"),
+    billPaidInterestWrap: document.getElementById("billPaidInterestWrap"),
     billPaidDate: document.getElementById("billPaidDate"),
     billPaidDateWrap: document.getElementById("billPaidDateWrap"),
     billEndDateWrap: document.getElementById("billEndDateWrap"),
@@ -256,7 +262,6 @@ function extendRecurringSeries() {
     const seriesMap = {};
     for (const bill of data.bills) {
         if (bill.frequency === "one-time") continue;
-        if (bill.endDate) continue;
         if (!seriesMap[bill.seriesId]) seriesMap[bill.seriesId] = [];
         seriesMap[bill.seriesId].push(bill);
     }
@@ -270,7 +275,9 @@ function extendRecurringSeries() {
         );
 
         const lastDate = parseLocalDate(last.dueDate);
-        if (lastDate >= endOfNextYear) continue;
+        const seriesEndDate = last.endDate ? parseLocalDate(last.endDate) : null;
+        const extendTo = seriesEndDate && seriesEndDate < endOfNextYear ? seriesEndDate : endOfNextYear;
+        if (lastDate >= extendTo) continue;
 
         // Calculează next occurrence de la lastDate
         const next = new Date(lastDate);
@@ -281,7 +288,7 @@ function extendRecurringSeries() {
             case "yearly": next.setFullYear(next.getFullYear() + last.interval); break;
         }
 
-        if (next > endOfNextYear) continue;
+        if (next > extendTo) continue;
 
         // Generează de la next în continuare
         const template = { ...last };
@@ -432,23 +439,38 @@ function normalizeAppData(rawData = {}) {
             return cats.filter(c => c !== "Transfers");
         })(),
         bills: Array.isArray(source.bills)
-            ? source.bills.map(bill => ({
-                ...base.billDefaults,
-                ...bill,
-                seriesId: bill.seriesId || bill.id || crypto.randomUUID(),
-                type: bill.type || "payment",
-                actualAmount: bill.actualAmount ?? null,
-                actualDate: bill.actualDate ?? null,
-                priority: Number.isInteger(bill.priority) ? bill.priority : 2,
-                frequency: bill.frequency || "one-time",
-                interval: Number(bill.interval) > 0 ? Number(bill.interval) : 1,
-                endDate: bill.endDate ?? null,
-                paid: Boolean(bill.paid),
-                debtId: bill.debtId ?? null,
-                debtGenerated: bill.debtGenerated ?? false,
-                debtPrincipal: bill.debtPrincipal ?? null,
-                debtInterest: bill.debtInterest ?? null
-            }))
+            ? source.bills.map(bill => {
+                const merged = {
+                    ...base.billDefaults,
+                    ...bill,
+                    seriesId: bill.seriesId || bill.id || crypto.randomUUID(),
+                    type: bill.type || "payment",
+                    actualAmount: bill.actualAmount ?? null,
+                    actualDate: bill.actualDate ?? null,
+                    priority: Number.isInteger(bill.priority) ? bill.priority : 2,
+                    frequency: bill.frequency || "one-time",
+                    interval: Number(bill.interval) > 0 ? Number(bill.interval) : 1,
+                    endDate: bill.endDate ?? null,
+                    paid: Boolean(bill.paid),
+                    debtId: bill.debtId ?? null,
+                    debtGenerated: bill.debtGenerated ?? false,
+                    debtPrincipal: bill.debtPrincipal ?? null,
+                    debtInterest: bill.debtInterest ?? null,
+                    actualDebtPrincipal: bill.actualDebtPrincipal ?? null,
+                    actualDebtInterest: bill.actualDebtInterest ?? null
+                };
+                // Pre-redesign data: a real paid amount was recorded but there was no separate
+                // "actual interest" field yet — the planned debtInterest estimate was the only
+                // number available, so it carries forward as the real interest too, and the real
+                // principal is whatever's left of the real total. debtPrincipal/debtInterest stay
+                // untouched as the original plan (same as amount always has).
+                if (merged.category === "Debt Payments" && merged.debtInterest != null
+                    && merged.actualAmount != null && merged.actualDebtPrincipal == null) {
+                    merged.actualDebtInterest = merged.debtInterest;
+                    merged.actualDebtPrincipal = Math.max(parseFloat(merged.actualAmount) - parseFloat(merged.debtInterest), 0);
+                }
+                return merged;
+            })
             : [],
         customCurrencies: Array.isArray(source.customCurrencies) ? source.customCurrencies : [],
         billNameGroups: Array.isArray(source.billNameGroups) ? source.billNameGroups : [],
@@ -488,7 +510,7 @@ function saveData() {
         const currentSnapshot = cloneAppData();
 
         if (!lastSavedSnapshot) {
-            lastSavedSnapshot = structuredClone(currentSnapshot);
+            lastSavedSnapshot = currentSnapshot;
         } else if (!snapshotsEqual(lastSavedSnapshot, currentSnapshot)) {
             undoStack.push({
                 snapshot: structuredClone(lastSavedSnapshot)
@@ -499,7 +521,7 @@ function saveData() {
             }
 
             redoStack = [];
-            lastSavedSnapshot = structuredClone(currentSnapshot);
+            lastSavedSnapshot = currentSnapshot;
         }
     }
 
@@ -931,6 +953,7 @@ function bindEvents() {
         updateTypeOptions();
         updateSaveAndMarkBtn();
         updatePaidLabels();
+        updateBillPaidAmountVisibility();
         updateSavingsMonthlyHint();
         updateSavingsEndDateHint();
     });
@@ -939,6 +962,7 @@ function bindEvents() {
         updateTypeOptions();
         updateSaveAndMarkBtn();
         updatePaidLabels();
+        updateBillPaidAmountVisibility();
         updateDebtPaymentAccounts();
         updateSavingsAccounts();
         updateSavingsMonthlyHint();
@@ -1963,7 +1987,8 @@ function renderMenuVisibilitySettings() {
 function generateRecurringBills(bill) {
     const bills = [];
     const endOfNextYear = new Date(new Date().getFullYear() + 1, 11, 31);
-    const limitDate = bill.endDate ? parseLocalDate(bill.endDate) : endOfNextYear;
+    const billEndDate = bill.endDate ? parseLocalDate(bill.endDate) : null;
+    const limitDate = billEndDate && billEndDate < endOfNextYear ? billEndDate : endOfNextYear;
 
     let current = parseLocalDate(bill.dueDate);
     let count = 0;
@@ -2093,6 +2118,34 @@ function handleSaveBill(event) {
 
     const id = els.editingId.value || crypto.randomUUID();
 
+    const category = existing ? existing.category : els.billCategory.value;
+    const isDebtPayment = category === "Debt Payments";
+
+    let amount, actualAmount, debtPrincipal, debtInterest, actualDebtPrincipal, actualDebtInterest;
+    if (isDebtPayment) {
+        // Principal/Interest are the locked planned split (like Amount) — set once, never
+        // re-derived. Actual Principal/Interest are the real override (like Actual Amount);
+        // amount/actualAmount stay as derived totals for every generic amount-reading path.
+        debtPrincipal = existing ? (existing.debtPrincipal ?? 0) : (Number(els.billAmount.value) || 0);
+        debtInterest = existing ? (existing.debtInterest ?? 0) : (Number(els.billInterest.value) || 0);
+        const paidPrincipalRaw = els.billPaidAmount.value;
+        const paidInterestRaw = els.billPaidInterest.value;
+        const hasOverride = paidPrincipalRaw !== "" || paidInterestRaw !== "";
+        actualDebtPrincipal = paidPrincipalRaw !== "" ? Number(paidPrincipalRaw) : null;
+        actualDebtInterest = paidInterestRaw !== "" ? Number(paidInterestRaw) : null;
+        amount = debtPrincipal + debtInterest;
+        actualAmount = hasOverride
+            ? (actualDebtPrincipal ?? debtPrincipal) + (actualDebtInterest ?? debtInterest)
+            : null;
+    } else {
+        amount = Number(els.billAmount.value);
+        actualAmount = els.billPaidAmount.value !== "" ? Number(els.billPaidAmount.value) : null;
+        debtPrincipal = existing ? (existing.debtPrincipal ?? null) : null;
+        debtInterest = existing ? (existing.debtInterest ?? null) : null;
+        actualDebtPrincipal = existing ? (existing.actualDebtPrincipal ?? null) : null;
+        actualDebtInterest = existing ? (existing.actualDebtInterest ?? null) : null;
+    }
+
     const bill = {
         id,
         seriesId: existing?.seriesId || id,
@@ -2105,10 +2158,10 @@ function handleSaveBill(event) {
                 return `Account Transfer`;
             })()
             : els.billName.value.trim()),
-        category: existing ? existing.category : els.billCategory.value,
-        type: existing ? existing.type : els.billType.value,      
-        amount: Number(els.billAmount.value),
-        actualAmount: els.billPaidAmount.value !== "" ? Number(els.billPaidAmount.value) : null,
+        category,
+        type: existing ? existing.type : els.billType.value,
+        amount,
+        actualAmount,
         dueDate: existing ? existing.dueDate : els.billDate.value,
         actualDate: els.billPaidDate.value !== "" ? els.billPaidDate.value : null,
         priority: Number(els.billPriority.value),
@@ -2125,8 +2178,10 @@ function handleSaveBill(event) {
                 ? ((data.debts || []).find(d => d.name === els.billName.value.trim())?.id ?? null)
                 : null),
         debtGenerated: existing ? (existing.debtGenerated ?? false) : false,
-        debtPrincipal: existing ? (existing.debtPrincipal ?? null) : null,
-        debtInterest: existing ? (existing.debtInterest ?? null) : null
+        debtPrincipal,
+        debtInterest,
+        actualDebtPrincipal,
+        actualDebtInterest
     };
 
     const fromVisible = document.getElementById("billFromWrap")?.style.display !== "none";
@@ -2311,6 +2366,7 @@ function resetForm() {
     els.billInterval.disabled = false;
     els.billDate.disabled = false;
     els.billAmount.disabled = false;
+    if (els.billInterest) els.billInterest.disabled = false;
     ["billCategory", "billName", "billType", "billFrequency"].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.closest(".csd-wrapper")?.classList.remove("csd-disabled");
@@ -2318,6 +2374,10 @@ function resetForm() {
     resetHelpTexts();
     els.billPaidAmountWrap.style.display = "none";
     els.billPaidDateWrap.style.display = "none";
+    if (els.billInterestWrap) els.billInterestWrap.style.display = "none";
+    if (els.billPaidInterestWrap) els.billPaidInterestWrap.style.display = "none";
+    if (els.billPaidInterest) els.billPaidInterest.style.color = "";
+    els.billPaidAmount.style.color = "";
     renderCategoryOptions();
     updateRecurringFieldsVisibility();
     document.getElementById("addBillModalTitle").innerHTML = "<span class=\"help-icon\" data-help-title=\"Adding a transaction\" data-help=\"Add one-time or recurring transactions.&lt;br&gt;&lt;br&gt;Each field has its own icon with more details.\" style=\"cursor:pointer; margin-right:6px;\">📋</span>Add a transaction";
@@ -2412,8 +2472,11 @@ function editBill(id) {
     updateTypeOptions(bill.type);
     updatePaidLabels();
     els.billName.value = bill.name;
-    els.billType.value = bill.type;  
-    els.billAmount.value = Number(bill.amount).toFixed(2);
+    els.billType.value = bill.type;
+    const isDebtPaymentBill = bill.category === "Debt Payments";
+    els.billAmount.value = isDebtPaymentBill
+        ? Number(bill.debtPrincipal ?? 0).toFixed(2)
+        : Number(bill.amount).toFixed(2);
     els.billDate.value = bill.dueDate;
     els.billPriority.value = bill.priority;
     els.billFrequency.value = bill.frequency;
@@ -2424,22 +2487,32 @@ function editBill(id) {
     const toEl = document.getElementById("billTo");
     if (fromEl) { fromEl.innerHTML = getAccountOptions(bill.category, bill.type, "from"); fromEl.value = bill.fromAccount || ""; }
     if (toEl) { toEl.innerHTML = getAccountOptions(bill.category, bill.type, "to"); toEl.value = bill.toAccount || ""; }
-    if (bill.category === "Debt Payments") {
+    if (isDebtPaymentBill) {
         updateDebtPaymentAccounts();
         if (fromEl) fromEl.value = bill.fromAccount || "";
+        if (els.billInterestWrap) els.billInterestWrap.style.display = "";
+        if (els.billInterest) els.billInterest.value = Number(bill.debtInterest ?? 0).toFixed(2);
+        if (els.billPaidInterestWrap) els.billPaidInterestWrap.style.display = "";
     }
 
     els.billPaidAmountWrap.style.display = "";
     els.billPaidDateWrap.style.display = "";
     const freqLabel = els.billFrequency.closest("label");
     freqLabel.classList.remove("grid-row-break");
-    els.billPaidAmount.value = bill.actualAmount != null ? Number(bill.actualAmount).toFixed(2) : "";
+    if (isDebtPaymentBill) {
+        els.billPaidAmount.value = bill.actualDebtPrincipal != null ? Number(bill.actualDebtPrincipal).toFixed(2) : "";
+        if (els.billPaidInterest) els.billPaidInterest.value = bill.actualDebtInterest != null ? Number(bill.actualDebtInterest).toFixed(2) : "";
+        els.billPaidAmount.style.color = bill.actualDebtPrincipal != null ? "var(--text)" : "";
+        if (els.billPaidInterest) els.billPaidInterest.style.color = bill.actualDebtInterest != null ? "var(--text)" : "";
+    } else {
+        els.billPaidAmount.value = bill.actualAmount != null ? Number(bill.actualAmount).toFixed(2) : "";
+        els.billPaidAmount.style.color = bill.actualAmount != null ? "var(--text)" : "";
+    }
     els.billPaidDate.value = bill.actualDate || "";
     els.billPaidDate.classList.toggle("has-value", !!bill.actualDate);
     els.billPaidDate.addEventListener("change", () => {
         document.getElementById("updateFromHere").style.display = (els.billPaidDate.value || !isRecurring) ? "none" : "";
     });
-    els.billPaidAmount.style.color = bill.actualAmount != null ? "var(--text)" : "";
 
     updateRecurringFieldsVisibility();
     setEditHelpTexts(isRecurring);
@@ -2451,6 +2524,7 @@ function editBill(id) {
     els.billFrequency.disabled = true;
     els.billInterval.disabled = true;
     els.billAmount.disabled = true;
+    if (els.billInterest) els.billInterest.disabled = true;
     ["billCategory", "billName", "billType", "billFrequency"].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.closest(".csd-wrapper")?.classList.add("csd-disabled");
@@ -2573,6 +2647,7 @@ function calcAutoRollover(beforeDate) {
 function updateBillPaidAmountVisibility() {
     const isZero = els.billAmount.value !== "" && Number(els.billAmount.value) === 0;
     els.billPaidAmountWrap.style.display = isZero ? "" : "none";
+    if (els.billPaidInterestWrap) els.billPaidInterestWrap.style.display = isZero ? "" : "none";
 }
 
 function updatePaidLabels() {
@@ -2582,13 +2657,28 @@ function updatePaidLabels() {
     const dateLabel = document.getElementById("paidDateLabel");
     const amountHelpIcon = document.getElementById("paidAmountHelpIcon");
     const dateHelpIcon = document.getElementById("paidDateHelpIcon");
+    const billAmountLabel = document.getElementById("billAmountLabel");
+    const billAmountHelpIcon = document.getElementById("billAmountHelpIcon");
+
+    const isDebtPayment = category === "Debt Payments";
+    if (els.billInterestWrap) els.billInterestWrap.style.display = isDebtPayment ? "" : "none";
+    if (billAmountLabel) billAmountLabel.textContent = isDebtPayment ? "Principal" : "Planned Amount";
+    if (billAmountHelpIcon) billAmountHelpIcon.setAttribute("data-help-title", isDebtPayment ? "💳 Principal" : "💰 Planned Amount");
+    if (billAmountHelpIcon) billAmountHelpIcon.setAttribute("data-help", isDebtPayment
+        ? "The planned portion of this payment that reduces what you owe — the rest is Interest. Once a real payment is recorded, this field locks; only New Principal below can change from then on."
+        : "Enter the amount you're planning for this transaction. Always enter a positive number — the transaction type (Received, Returned, Deposit, Withdrawal, Payment, etc.) determines the direction of the money.&lt;br&gt;&lt;br&gt;Making a partial or extra payment toward something you already planned? Enter &lt;strong&gt;0&lt;/strong&gt; here instead of a new planned amount — a &quot;New/Paid Amount&quot; field will appear for the real amount, without inflating your planned total.&lt;br&gt;&lt;br&gt;Wasn't planned at all? Enter &lt;strong&gt;0&lt;/strong&gt; here too — put the real amount in New/Paid Amount below instead of guessing a planned figure.&lt;br&gt;&lt;br&gt;Once a real payment is recorded, this field locks — it stays as your original plan; only the New/Paid Amount can change from then on.");
 
     let amountText = "New/Paid Amount";
     let dateText = "New/Paid Date";
     let amountHelp = "Enter a New/Paid Amount if the actual paid amount differs from the planned Amount. If Planned Amount is 0, enter the real amount of an unplanned transaction here.";
     let dateHelp = "Enter a New/Paid Date if the actual payment date differs from the original Due Date.";
 
-    if (isIncomeCategory(category)) {
+    if (isDebtPayment) {
+        amountText = "New Principal";
+        amountHelp = "Enter the real principal paid if it differs from the plan — for example, you paid extra toward the balance. Only this reduces what you owe.";
+        dateText = "New/Paid Date";
+        dateHelp = "Enter a New/Paid Date if the actual payment date differs from the original Due Date.";
+    } else if (isIncomeCategory(category)) {
         if (type === "payment") {
             amountText = "New/Received Amount";
             amountHelp = "Enter a New/Received Amount if the actual received amount differs from the planned Amount. If Planned Amount is 0, enter the real amount of an unplanned transaction here.";
@@ -3231,9 +3321,17 @@ function renderBills() {
                 ? `<span class="bill-original-amount">${formatMoney(bill.amount)}</span>`
                 : ""
             }
+    ${(() => {
+                const hasOriginal = bill.actualAmount != null && Number(bill.amount) > 0 && Number(bill.actualAmount) !== Number(bill.amount);
+                if (bill.category !== "Debt Payments" || bill.debtInterest == null) return "";
+                const principal = getBillDebtPrincipal(bill);
+                const interest = getBillDebtInterest(bill);
+                return `<span class="bill-debt-split bill-debt-split--desktop${hasOriginal ? " bill-debt-split--stacked" : ""}">Principal ${formatMoney(principal)} · Interest ${formatMoney(interest)}</span>`;
+            })()}
 </span>
   </div>
   ${(bill.fromAccount || bill.toAccount) ? `<div class="bill-accounts-row">${bill.fromAccount ? `<span class="bill-account-tag">⬆️ ${escapeHtml((data.accounts||[]).find(a=>a.id===bill.fromAccount)?.name||'')}</span>` : ''}${bill.fromAccount && bill.toAccount ? ` → ` : ''}${bill.toAccount ? `<span class="bill-account-tag">⬇️ ${escapeHtml((data.accounts||[]).find(a=>a.id===bill.toAccount)?.name||'')}</span>` : ''}</div>` : ''}
+  ${(bill.category === "Debt Payments" && bill.debtInterest != null) ? `<div class="bill-debt-split bill-debt-split--mobile">Principal ${formatMoney(getBillDebtPrincipal(bill))} · Interest ${formatMoney(getBillDebtInterest(bill))}</div>` : ''}
   <div class="bill-details-row">
         <div class="bill-date-wrap"><span class="pill app-tooltip-trigger" style="display:inline-flex; align-items:center; gap:6px;"><svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0; opacity:0.4;"><rect x="2" y="5" width="16" height="13" rx="2"/><line x1="2" y1="9" x2="18" y2="9"/><line x1="7" y1="3" x2="7" y2="7"/><line x1="13" y1="3" x2="13" y2="7"/></svg>${formatDisplayDate(parseLocalDate(getBillDisplayDate(bill)))}<span class="app-tooltip">${getBillDateTooltip(bill)}</span></span></div>
     <div class="bill-status-wrap"><span class="bill-countdown">${getDaysLabel(bill)}</span></div>
@@ -3379,8 +3477,11 @@ function renderPageHeader(section) {
         const rightLabels = labelSegs.filter(s => s.label !== "left to spend")
             .map(s => `<span style="color:${s.color};font-size:10px;white-space:nowrap;">${s.label === "Debt Payments" ? "Debts" : s.label} <strong>${formatMoney(s.amount)}</strong></span>`)
             .join("&nbsp;&nbsp;&nbsp;");
-        const leftLabel = labelSegs.find(s => s.label === "left to spend");
-        const leftHtml = leftLabel ? `<span style="color:var(--mint-text);font-size:12px;white-space:nowrap;"><span class="help-icon" data-help-title="Left to Spend — How it works" data-help="This is the amount of cash available after receiving income, setting aside savings, investing, and paying cash/debit expenses.&lt;br&gt;&lt;br&gt;Any payment made with a &lt;strong&gt;credit card&lt;/strong&gt; is &lt;strong&gt;not deducted&lt;/strong&gt; from this amount — it appears in your category totals but doesn't affect your available cash.&lt;br&gt;&lt;br&gt;Formula: Rollover + Income received − Savings − Investments − Cash expenses" style="cursor:pointer;margin-right:4px;">📊</span>Left to spend <strong>${formatMoney(leftLabel.amount)}</strong></span>` : "";
+        const leftHtml = totalBase > 0
+            ? (amountLeft >= -0.005
+                ? `<span style="color:var(--mint-text);font-size:12px;white-space:nowrap;"><span class="help-icon" data-help-title="Left to Spend — How it works" data-help="This is the amount of cash available after receiving income, setting aside savings, investing, and paying cash/debit expenses.&lt;br&gt;&lt;br&gt;Any payment made with a &lt;strong&gt;credit card&lt;/strong&gt; is &lt;strong&gt;not deducted&lt;/strong&gt; from this amount — it appears in your category totals but doesn't affect your available cash.&lt;br&gt;&lt;br&gt;Formula: Rollover + Income received − Savings − Investments − Cash expenses" style="cursor:pointer;margin-right:4px;">📊</span>Left to spend <strong>${formatMoney(amountLeft)}</strong></span>`
+                : `<span style="color:var(--red);font-size:12px;white-space:nowrap;"><span class="help-icon" data-help-title="Overspent — How it works" data-help="This means your savings, investments, and cash/debit expenses added up to more than your rollover plus income received.&lt;br&gt;&lt;br&gt;Any payment made with a &lt;strong&gt;credit card&lt;/strong&gt; is &lt;strong&gt;not counted&lt;/strong&gt; here — it appears in your category totals but doesn't affect your available cash.&lt;br&gt;&lt;br&gt;Formula: Rollover + Income received − Savings − Investments − Cash expenses" style="cursor:pointer;margin-right:4px;">📊</span>Overspent by <strong>${formatMoney(Math.abs(amountLeft))}</strong></span>`)
+            : "";
 
         ipb.innerHTML = `
             <div class="ipb-track"><div class="ipb-segments">${segHtml || '<div style="width:100%;height:100%;background:var(--bar-bg);"></div>'}</div></div>
@@ -5196,7 +5297,7 @@ const payments = yearBills.filter(b => b.paid && spendingCats.includes(b.categor
 
     // Tabel
     const tableRows = top5.length === 0
-        ? `<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:16px;">No paid spendings this year</td></tr>`
+        ? `<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:16px;">No paid outflows this year</td></tr>`
         : top5.map((g, i) => {
         const shade = peachShades[i % peachShades.length];
         return `<tr>
@@ -5209,15 +5310,15 @@ const payments = yearBills.filter(b => b.paid && spendingCats.includes(b.categor
     return `
         <div class="mi-cat-card">
             <div class="mi-cat-header" style="background:var(--peach);">
-                <div class="mi-cat-header-name">TOP 5 SPENDINGS IN ${year}</div>
+                <div class="mi-cat-header-name">TOP 5 OUTFLOWS IN ${year}</div>
             </div>
             <div class="mi-donut-section">
-                <svg viewBox="0 0 180 180" role="img" class="mi-donut-svg" aria-label="Top 5 spendings ${year}">
+                <svg viewBox="0 0 180 180" role="img" class="mi-donut-svg" aria-label="Top 5 outflows ${year}">
                     ${donutSegments}
                     <text x="${CX}" y="${CY - 6}" text-anchor="middle" font-size="15" font-weight="700" fill="var(--peach-text)">${year}</text>
                     <text x="${CX}" y="${CY + 10}" text-anchor="middle" font-size="11" fill="#999">TOP 5</text>
                 </svg>
-                <div class="mi-donut-legend">${legendItems || '<span style="font-size:11px;color:var(--muted);">No paid spendings this year</span>'}</div>
+                <div class="mi-donut-legend">${legendItems || '<span style="font-size:11px;color:var(--muted);">No paid outflows this year</span>'}</div>
             </div>
             <div class="mi-table-scroll mi-table-summary" style="background:var(--peach-soft-3);">
                 <table class="mi-cat-table">
@@ -5509,6 +5610,14 @@ function getBillDisplayAmount(bill) {
     return bill.actualAmount != null ? bill.actualAmount : bill.amount;
 }
 
+function getBillDebtPrincipal(bill) {
+    return bill.actualDebtPrincipal != null ? bill.actualDebtPrincipal : bill.debtPrincipal;
+}
+
+function getBillDebtInterest(bill) {
+    return bill.actualDebtInterest != null ? bill.actualDebtInterest : bill.debtInterest;
+}
+
 function applyBillFilters(bills, { statusFilter, priorityFilter, categoryFilter, monthFilter, yearFilter, dateString }) {
     return bills.filter(bill => {
         if (dateString !== undefined && getBillDisplayDate(bill) !== dateString) return false;
@@ -5740,7 +5849,7 @@ function updateCurrencyInputDisplay() {
     const symbol = String(data.settings.currencySymbol || "").split("|")[0];
     const isAfter = data.settings.currencyPosition === "after";
 
-    ["billAmountCurrency", "billPaidAmountCurrency", "debtCCMinPaymentCurrency", "debtCCPlannedPaymentCurrency", "debtCCLimitCurrency", "debtLoanBalanceCurrency", "debtOtherBalanceCurrency", "debtOtherMonthlyPaymentCurrency", "accountCreditLimitCurrency", "savingsMonthlyContributionCurrency"].forEach(id => {
+    ["billAmountCurrency", "billPaidAmountCurrency", "billInterestCurrency", "billPaidInterestCurrency", "debtCCMinPaymentCurrency", "debtCCPlannedPaymentCurrency", "debtCCLimitCurrency", "debtLoanBalanceCurrency", "debtOtherBalanceCurrency", "debtOtherMonthlyPaymentCurrency", "accountCreditLimitCurrency", "savingsMonthlyContributionCurrency"].forEach(id => {
         const span = document.getElementById(id);
         if (!span) return;
         span.textContent = symbol;
@@ -6072,7 +6181,7 @@ async function autoSaveToBackup() {
         const fileName = "ultimate-paycheck-v1-backup.json";
         const activated = localStorage.getItem("ultimatePaycheckActivated");
         const exportData = activated ? { ...data, _activated: true } : data;
-        const json = JSON.stringify(exportData, null, 2);
+        const json = JSON.stringify(exportData);
         const blob = new Blob([json], { type: "application/json" });
 
         const fileHandle = await directoryHandle.getFileHandle(fileName, { create: true });
@@ -7415,6 +7524,12 @@ function saveDebt() {
 
     if (txGenerate && typeof generateDebtTransactions === 'function') {
         generateDebtTransactions(savedDebt);
+        if (type === "credit_card") {
+            const genCount = data.bills.filter(b => b.debtId === savedDebt.id && b.debtGenerated && !b.paid).length;
+            if (genCount === 0) {
+                alert("No payment plan was generated — the linked account currently shows no balance owed. If that's not right, update the account's balance in Bank Accounts.");
+            }
+        }
     } else if (!txGenerate) {
         data.bills = data.bills.filter(b => !(b.debtId === savedDebt.id && b.debtGenerated && !b.paid));
     }

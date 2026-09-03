@@ -237,6 +237,16 @@
               <span class="menu-label">Backup</span>
               <span class="app-tooltip">Backup</span>
             </button>
+            <button data-section="faq" class="menu-link app-tooltip-trigger">
+              <svg class="menu-icon" width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+                stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="10" cy="10" r="7.5" />
+                <path d="M7.5 8a2.5 2.5 0 1 1 3.5 2.3c-0.8 0.4-1 0.9-1 1.7" />
+                <line x1="10" y1="14.4" x2="10" y2="14.4" />
+              </svg>
+              <span class="menu-label">FAQ</span>
+              <span class="app-tooltip">FAQ</span>
+            </button>
             <button class="menu-link app-tooltip-trigger" onclick="showActivationModal()" id="menuActivation" style="display:none;">
               <svg class="menu-icon" width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor"
                 stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
@@ -458,13 +468,23 @@
               <label>
                 <span style="display:inline-flex; align-items:center; gap:4px;"><span class="help-icon"
                     data-help-title="💰 Planned Amount"
-                    data-help="Enter the amount you're planning for this transaction. Always enter a positive number — the transaction type (Received, Returned, Deposit, Withdrawal, Payment, etc.) determines the direction of the money.&lt;br&gt;&lt;br&gt;Making a partial or extra payment toward something you already planned? Enter &lt;strong&gt;0&lt;/strong&gt; here instead of a new planned amount — a &quot;New/Paid Amount&quot; field will appear for the real amount, without inflating your planned total.&lt;br&gt;&lt;br&gt;Wasn't planned at all? Enter &lt;strong&gt;0&lt;/strong&gt; here too — put the real amount in New/Paid Amount below instead of guessing a planned figure.&lt;br&gt;&lt;br&gt;Once a real payment is recorded, this field locks — it stays as your original plan; only the New/Paid Amount can change from then on.">💰</span>Planned Amount</span>
+                    data-help="Enter the amount you're planning for this transaction. Always enter a positive number — the transaction type (Received, Returned, Deposit, Withdrawal, Payment, etc.) determines the direction of the money.&lt;br&gt;&lt;br&gt;Making a partial or extra payment toward something you already planned? Enter &lt;strong&gt;0&lt;/strong&gt; here instead of a new planned amount — a &quot;New/Paid Amount&quot; field will appear for the real amount, without inflating your planned total.&lt;br&gt;&lt;br&gt;Wasn't planned at all? Enter &lt;strong&gt;0&lt;/strong&gt; here too — put the real amount in New/Paid Amount below instead of guessing a planned figure.&lt;br&gt;&lt;br&gt;Once a real payment is recorded, this field locks — it stays as your original plan; only the New/Paid Amount can change from then on." id="billAmountHelpIcon">💰</span><span id="billAmountLabel">Planned Amount</span></span>
                 <div class="field-hint-wrap">
-                  <div class="amount-input-wrap">
+                  <div class="amount-input-wrap" id="billAmountWrap">
                     <span class="currency-symbol-overlay" id="billAmountCurrency"></span>
                     <input id="billAmount" type="number" min="0" step="0.01" placeholder="0.00" onkeydown="if(event.key==='Enter')this.blur()" onblur="updateBillPaidAmountVisibility()" />
                   </div>
                   <div id="svAmountHint" class="field-hint field-hint--purple" style="display:none;"></div>
+                </div>
+              </label>
+
+              <label id="billInterestWrap" style="display:none;">
+                <span style="display:inline-flex; align-items:center; gap:4px;"><span class="help-icon"
+                    data-help-title="💳 Interest"
+                    data-help="The portion of this payment that's interest — the rest is Principal, and only the Principal reduces what you owe. It's estimated automatically from the debt's APR, but change it here if your statement shows a different amount.">💳</span>Interest</span>
+                <div class="amount-input-wrap">
+                  <span class="currency-symbol-overlay" id="billInterestCurrency"></span>
+                  <input id="billInterest" type="number" min="0" step="0.01" placeholder="0.00" onkeydown="if(event.key==='Enter')this.blur()" />
                 </div>
               </label>
 
@@ -490,6 +510,16 @@
                 <div class="amount-input-wrap">
                   <span class="currency-symbol-overlay" id="billPaidAmountCurrency"></span>
                   <input id="billPaidAmount" type="number" min="0" step="0.01" placeholder="0.00" onkeydown="if(event.key==='Enter')this.blur()" />
+                </div>
+              </label>
+
+              <label id="billPaidInterestWrap" style="display:none;">
+                <span style="display:inline-flex; align-items:center; gap:4px;"><span class="help-icon"
+                    data-help-title="💳 New Interest"
+                    data-help="Enter the real interest charged if it's different from the estimate — for example, your card statement shows a different amount.">💳</span>New Interest</span>
+                <div class="amount-input-wrap">
+                  <span class="currency-symbol-overlay" id="billPaidInterestCurrency"></span>
+                  <input id="billPaidInterest" type="number" min="0" step="0.01" placeholder="0.00" onkeydown="if(event.key==='Enter')this.blur()" />
                 </div>
               </label>
 
@@ -963,6 +993,11 @@
                 <option value="">Choose week start</option>
                 <option value="sunday">Sunday</option>
                 <option value="monday">Monday</option>
+                <option value="tuesday">Tuesday</option>
+                <option value="wednesday">Wednesday</option>
+                <option value="thursday">Thursday</option>
+                <option value="friday">Friday</option>
+                <option value="saturday">Saturday</option>
               </select>
             </label>
 
@@ -1225,6 +1260,71 @@
               💡 Before switching devices, make sure your latest backup was saved on the device you used last.
             </div>
           </div>
+        </div>
+      </section>
+
+      <section id="section-faq" class="section">
+        <div class="panel">
+          <p class="qs-text" style="margin:0 0 6px;">Quick answers to the questions I get asked the most. Don't see yours here? Reach out on the Contact page.</p>
+          <div class="faq-item">
+            <button class="backup-guide-toggle" onclick="toggleFaqItem(this)">
+              <span>Is there an autosave function? Do I have to export my data every time I use the app?</span>
+              <svg class="backup-guide-chevron" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="5 8 10 13 15 8"/>
+              </svg>
+            </button>
+            <div class="backup-guide-body" style="display:none;">
+              <div class="note" style="margin-top:14px;">
+                The app autosaves to your browser's local storage after every change, but that storage isn't indestructible — clearing browser data, incognito/private mode, switching browsers or devices, or a browser update can wipe it, since everything lives only on this device, never in the cloud. That's why exporting a backup every time you finish using the app is recommended — it's not optional busywork, it's the real safety net. Always-on cloud backup (what monthly-subscription apps charge for) would need ongoing server costs; this app is a one-time purchase with no subscription, so backup is a manual step instead.
+              </div>
+            </div>
+          </div>
+
+          <div class="faq-item">
+            <button class="backup-guide-toggle" onclick="toggleFaqItem(this)">
+              <span>Can I add two different paychecks, like mine and my husband's?</span>
+              <svg class="backup-guide-chevron" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="5 8 10 13 15 8"/>
+              </svg>
+            </button>
+            <div class="backup-guide-body" style="display:none;">
+              <div class="note" style="margin-top:14px;">
+                A paycheck is just a date range, not tied to one income source — add both incomes as separate Income transactions dated within the same paycheck period, and they'll show up together. You can also create a second paycheck, but if the date ranges overlap, transactions in that overlap will appear in both paychecks (double-counted) — only recommended if the pay periods don't overlap in dates.
+              </div>
+            </div>
+          </div>
+
+          <div class="faq-item">
+            <button class="backup-guide-toggle" onclick="toggleFaqItem(this)">
+              <span>Is the Current/Projected Balance on the Calendar accurate before I finish marking last month's transactions as paid?</span>
+              <svg class="backup-guide-chevron" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="5 8 10 13 15 8"/>
+              </svg>
+            </button>
+            <div class="backup-guide-body" style="display:none;">
+              <div class="note" style="margin-top:14px;">
+                Yes — those numbers are calculated only from the currently viewed month's own transactions, with no dependency on prior months. It's already accurate for what's scheduled in that month, regardless of whether previous months are finalized. Monthly Insights and Paycheck Budget work differently — those do carry a rollover balance from before, so past months affect the numbers there.
+              </div>
+            </div>
+          </div>
+
+          <div class="faq-item">
+            <button class="backup-guide-toggle" onclick="toggleFaqItem(this)">
+              <span>If I upgrade from Pro to Ultimate, do I have to re-enter all my data?</span>
+              <svg class="backup-guide-chevron" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="5 8 10 13 15 8"/>
+              </svg>
+            </button>
+            <div class="backup-guide-body" style="display:none;">
+              <div class="note" style="margin-top:14px;">
+                No. Export your Pro backup and import it into Ultimate — all existing transactions carry over untouched. To connect existing Savings/Debt-category transactions (e.g. "Emergency Fund") to the new dedicated Savings and Debt pages, just create a new fund or debt with the exact same name — the app matches by name, so past history (saved amount, progress, chart) links up automatically without re-entering anything. Feel free to try this first in the Ultimate demo to see how it works.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <p class="qs-text">Don't need this page in your menu? <button class="acc-link-btn" onclick="hideMenuItem('faq')">Hide this page from the menu</button> — you can always bring it back from Settings.</p>
         </div>
       </section>
 

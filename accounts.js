@@ -69,8 +69,16 @@ function calcAccountBalance(accountId, monthFilter, yearFilter) {
         if (!isIn && !isOut) continue;
 
         const amount = parseFloat(getBillDisplayAmount(bill)) || 0;
+        // A credit card Debt Payment only reduces what's owed by its principal portion — the
+        // interest portion was already implicitly part of the balance (the card issuer's own
+        // accrual, not something this app tracks separately), so crediting the full payment
+        // here would double-count it. The account the money left from still sees the full
+        // real amount that left it — only the "in" side (the card) is adjusted.
+        const inAmount = (isIn && bill.category === "Debt Payments" && bill.debtInterest != null)
+            ? parseFloat(getBillDebtPrincipal(bill))
+            : amount;
 
-        if (isIn)  totalIn  += amount;
+        if (isIn)  totalIn  += inAmount;
         if (isOut) totalOut += amount;
 
         if (isFiltered) {
@@ -78,7 +86,7 @@ function calcAccountBalance(accountId, monthFilter, yearFilter) {
             const monthMatch = !monthFilter || String(d.getMonth() + 1) === String(monthFilter);
             const yearMatch  = !yearFilter  || String(d.getFullYear())  === String(yearFilter);
             if (monthMatch && yearMatch) {
-                if (isIn)  periodIn  += amount;
+                if (isIn)  periodIn  += inAmount;
                 if (isOut) periodOut += amount;
             }
         }
@@ -120,7 +128,11 @@ function calcBalanceBeforePeriod(accountId, monthFilter, yearFilter) {
 
         if (before) {
             const amount = parseFloat(getBillDisplayAmount(bill)) || 0;
-            if (bill.toAccount   === accountId) running += amount;
+            const isIn = bill.toAccount === accountId;
+            if (isIn) {
+                const inAmount = (bill.category === "Debt Payments" && bill.debtInterest != null) ? parseFloat(getBillDebtPrincipal(bill)) : amount;
+                running += inAmount;
+            }
             if (bill.fromAccount === accountId) running -= amount;
         }
     }
@@ -158,7 +170,8 @@ function renderAccountTransactions(accountId, monthFilter, yearFilter) {
         const amount = parseFloat(getBillDisplayAmount(bill)) || 0;
         const isIn  = bill.toAccount   === accountId;
         const isOut = bill.fromAccount === accountId;
-        const delta = (isIn && !isOut) ? amount : (!isIn && isOut) ? -amount : 0;
+        const inAmount = (isIn && bill.category === "Debt Payments" && bill.debtInterest != null) ? parseFloat(getBillDebtPrincipal(bill)) : amount;
+        const delta = (isIn && !isOut) ? inAmount : (!isIn && isOut) ? -amount : 0;
 
         let displayBalance;
         let isProjected = false;
