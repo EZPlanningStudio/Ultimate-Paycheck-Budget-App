@@ -9,6 +9,7 @@ const FILES_TO_CACHE = [
   'accounts.js',
   'debt.js',
   'savings.js',
+  'version.js',
   'manifest.json',
   'icon-512.png'
 ];
@@ -31,8 +32,14 @@ self.addEventListener('activate', event => {
 
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
-   if (url.pathname.endsWith('app.js') || url.pathname.endsWith('styles.css') || url.pathname.endsWith('paycheck.js') || url.pathname.endsWith('accounts.js') || url.pathname.endsWith('debt.js') || url.pathname.endsWith('savings.js') || url.pathname.endsWith('index.html') || url.pathname === '/') {
-    event.respondWith(fetch(event.request));
+   if (url.pathname.endsWith('app.js') || url.pathname.endsWith('styles.css') || url.pathname.endsWith('paycheck.js') || url.pathname.endsWith('accounts.js') || url.pathname.endsWith('debt.js') || url.pathname.endsWith('savings.js') || url.pathname.endsWith('version.js') || url.pathname.endsWith('manifest.json') || url.pathname.endsWith('index.html') || url.pathname === '/') {
+    event.respondWith(
+      fetch(event.request).then(response => {
+        const copy = response.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
+        return response;
+      }).catch(() => caches.match(event.request))
+    );
     return;
   }
   event.respondWith(
