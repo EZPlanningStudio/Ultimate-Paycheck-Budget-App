@@ -7053,10 +7053,6 @@ function saveAccount() {
             data.accounts[idx] = updated;
         }
     } else {
-        if (data.accounts.length >= 20) {
-            alert("You can add up to 20 accounts.");
-            return;
-        }
         const newAccData = { id: crypto.randomUUID(), name, type, startBalance, startDate };
         if (type === "credit" && creditLimit) newAccData.creditLimit = creditLimit;
         const newId = newAccData.id;
